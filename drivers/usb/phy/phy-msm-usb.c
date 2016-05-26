@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2015, Linux Foundation. All rights reserved.
+ * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,10 +53,6 @@
 
 #include <linux/msm-bus.h>
 
-#ifdef CONFIG_FORCE_FAST_CHARGE
-#include <linux/fastchg.h>
-#endif
-
 #define MSM_USB_BASE	(motg->regs)
 #define MSM_USB_PHY_CSR_BASE (motg->phy_csr_regs)
 
@@ -99,7 +96,7 @@ module_param(lpm_disconnect_thresh , uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(lpm_disconnect_thresh,
 	"Delay before entering LPM on USB disconnect");
 
-static bool floated_charger_enable;
+static bool floated_charger_enable = 1;
 module_param(floated_charger_enable , bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(floated_charger_enable,
 	"Whether to enable floated charger");
@@ -124,6 +121,14 @@ static struct power_supply *psy;
 
 static bool aca_id_turned_on;
 static bool legacy_power_supply;
+
+
+#if defined (WT_USE_FAN54015)
+
+extern  bool IsUsbPlugIn, IsTAPlugIn, TrunOnChg, OTGturnOn;
+
+#endif
+
 static inline bool aca_enabled(void)
 {
 #ifdef CONFIG_USB_MSM_ACA
@@ -1264,6 +1269,14 @@ static irqreturn_t msm_otg_phy_irq_handler(int irq, void *data)
 		msm_id_status_w(&motg->id_status_work.work);
 	}
 
+
+#if defined (WT_USE_FAN54015)
+	printk(KERN_WARNING   "~OTG IRQ \n");
+	OTGturnOn = true;
+
+#endif
+
+
 	return IRQ_HANDLED;
 }
 
@@ -1966,15 +1979,6 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 
 	if (motg->cur_power == mA)
 		return;
-
-#ifdef CONFIG_FORCE_FAST_CHARGE
-        if (force_fast_charge > 0 && mA > 0) {
-            mA = IDEV_ACA_CHG_MAX;
-            pr_info("USB fast charging is ON\n");
-        } else {
-            pr_info("USB fast charging is OFF\n");
-        }
-#endif
 
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
 	msm_otg_dbg_log_event(&motg->phy, "AVAIL CURR FROM USB",
@@ -3289,15 +3293,23 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_chg_detect_work(&motg->chg_work.work);
 				break;
 			case USB_CHG_STATE_DETECTED:
+				#if defined (WT_USE_FAN54015)
+				if (motg->chg_type == USB_DCP_CHARGER) {
+					printk(KERN_WARNING   "~TA Plug In.  \n");
+					IsTAPlugIn = true;
+					TrunOnChg = true;
+				} else  if (motg->chg_type == USB_SDP_CHARGER) {
+					printk(KERN_WARNING   "~USB Plug In.  \n");
+					IsUsbPlugIn = true;
+					TrunOnChg = true;
+				}
+				#endif
 				switch (motg->chg_type) {
 				case USB_DCP_CHARGER:
 					/* fall through */
 				case USB_PROPRIETARY_CHARGER:
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
-					otg->phy->state =
-						OTG_STATE_B_CHARGER;
-					work = 0;
 					msm_otg_dbg_log_event(&motg->phy,
 					"PM RUNTIME: PROPCHG PUT",
 					get_pm_runtime_counter(otg->phy->dev),
@@ -3306,10 +3318,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					break;
 				case USB_FLOATED_CHARGER:
 					msm_otg_notify_charger(motg,
-							IDEV_CHG_MAX);
-					otg->phy->state =
-						OTG_STATE_B_CHARGER;
-					work = 0;
+							IDEV_CHG_MIN);
 					msm_otg_dbg_log_event(&motg->phy,
 					"PM RUNTIME: FLCHG PUT",
 					get_pm_runtime_counter(otg->phy->dev),
@@ -3525,16 +3534,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 			}
 		} else if (test_bit(ID_C, &motg->inputs)) {
 			msm_otg_notify_charger(motg, IDEV_ACA_CHG_MAX);
-		}
-		break;
-	case OTG_STATE_B_CHARGER:
-		if (test_bit(B_SESS_VLD, &motg->inputs)) {
-			pr_debug("BSV set again\n");
-			msm_otg_dbg_log_event(&motg->phy, "BSV SET AGAIN",
-					motg->inputs, otg->phy->state);
-		} else if (!test_bit(B_SESS_VLD, &motg->inputs)) {
-			otg->phy->state = OTG_STATE_B_IDLE;
-			work = 1;
 		}
 		break;
 	case OTG_STATE_B_WAIT_ACON:
@@ -5809,7 +5808,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 			 * for device mode In this case HUB should be gone
 			 * only once out of reset at the boot time and after
 			 * that always stay on*/
-			if (gpio_is_valid(motg->pdata->hub_reset_gpio)) {
+			if (gpio_is_valid(motg->pdata->hub_reset_gpio))
 				ret = devm_gpio_request(&pdev->dev,
 						motg->pdata->hub_reset_gpio,
 						"qcom,hub-reset-gpio");
@@ -5819,7 +5818,6 @@ static int msm_otg_probe(struct platform_device *pdev)
 				}
 				gpio_direction_output(
 					motg->pdata->hub_reset_gpio, 1);
-			}
 
 			if (gpio_is_valid(motg->pdata->switch_sel_gpio)) {
 				ret = devm_gpio_request(&pdev->dev,
