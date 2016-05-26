@@ -66,6 +66,73 @@
 		};
 	};
 
+	gpio-leds {
+		compatible = "gpio-leds";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&button_backlight_off>;
+
+		keypad-backlight {
+			gpios = <&msm_gpio 119 0>;
+			label = "button-backlight";
+			linux,default-trigger = "none";
+		};
+	};
+i2c@78ba000 {/* i2c 6 */
+	aw2013@45 {/*blink */
+		compatible = "awinc, aw2013";
+		reg = <0x45>;
+		rgb_led-supply = <&pm8916_l16>;
+
+		red {
+			label = "red";
+			linux,default-trigger = "battery-red";
+			default-state = "off";
+			retain-state-suspended;
+		};
+
+		green {
+			label = "green";
+			linux,default-trigger = "battery-green";
+			default-state = "off";
+			retain-state-suspended;
+		};
+
+		blue {
+			label = "blue";
+			linux,default-trigger = "battery-blue";
+			default-state = "off";
+			retain-state-suspended;
+		};
+		white {
+			label = "white";
+			linux,default-trigger = "none";
+			default-state = "off";
+			retain-state-suspended;
+		};
+
+		yellow {
+			label = "yellow";
+			linux,default-trigger = "none";
+			default-state = "off";
+			retain-state-suspended;
+		};
+
+		cyan {
+			label = "cyan";
+			linux,default-trigger = "none";
+			default-state = "off";
+			retain-state-suspended;
+		};
+		purple {
+			label = "purple";
+			linux,default-trigger = "none";
+			default-state = "off";
+			retain-state-suspended;
+		};
+
+	};
+};
 	sound {
 		compatible = "qcom,msm8x16-audio-codec";
 		qcom,model = "msm8x16-skui-snd-card";
@@ -123,7 +190,6 @@
 		asoc-codec = <&stub_codec>, <&pm8916_tombak_dig>;
 		asoc-codec-names = "msm-stub-codec.1", "tombak_codec";
 	};
-
 	bq2022a {
 		compatible = "bq2022a";
 		qcom,bq2022a-id-gpio = <&pm8916_gpios 3 0>;
@@ -154,13 +220,6 @@
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
-
-	mdss_fb0: qcom,mdss_fb_primary {
-		/* Ketut P. Kumajaya: For old bootloader, old splash image */
-		/* Both recovery and bootanimation framebuffer need this */
-		/* qcom,memblock-reserve = <0x83200000 0xfa0000>;
-		qcom,mdss-fb-splash-logo-enabled; */
-	};
 };
 
 &pmx_mdss {
