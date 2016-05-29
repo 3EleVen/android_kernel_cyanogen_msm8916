@@ -24,6 +24,7 @@
 #include <linux/err.h>
 
 #include "mdss_dsi.h"
+#include "mdss_livedisplay.h"
 
 #define HARDWARE_MAX_ITEM_LONGTH		64
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
@@ -154,7 +155,7 @@ u32 mdss_dsi_panel_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char cmd0,
 	return 0;
 }
 
-static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_panel_cmds *pcmds)
 {
 	struct dcs_cmd_req cmdreq;
@@ -636,7 +637,6 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 			goto end;
 	}
 
-
 	if (ctrl->init_last) {
 		if (ctrl->gamma_cmds.cmd_cnt)
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma_cmds);
@@ -652,6 +652,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ce_cmds.cmd_cnt)
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->ce_cmds);
 	}
+
+	mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
 	s2w_scr_suspended = false;
@@ -1831,6 +1833,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
+
+	mdss_livedisplay_parse_dt(np, pinfo);
 
 	return 0;
 
